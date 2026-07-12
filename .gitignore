@@ -29,7 +29,16 @@ dist-ssr
 
 # Python
 backend/__pycache__/
+__pycache__/
 *.pyc
+backend/venv/
+venv/
 
 # Cached market data (regenerated automatically on run)
+# NOTE: DATA_DIR in backend/app.py is a path relative to the process's
+# working directory. Since `python backend/app.py` is launched from the
+# project root, the cache actually lands at ./market_data/, not
+# backend/market_data/ -- both are listed here to be safe regardless of
+# how it's launched.
+market_data/
 backend/market_data/
