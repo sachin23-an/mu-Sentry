@@ -1,0 +1,5 @@
+{
+  "name": "μ-Sentry Equity",
+  "description": "Real-time observability and risk desk for Indian Equities. Tracks NIFTY 50 / SENSEX metrics with a live Python core and Yahoo Finance bridge.",
+  "requestFramePermissions": []
+}

@@ -1,0 +1,36 @@
+{
+  "name": "mu-sentry",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"tsx server.ts\" \"npm run backend:dev\"",
+    "backend:dev": "python backend/app.py",
+    "build": "vite build",
+    "start": "NODE_ENV=production concurrently \"tsx server.ts\" \"python backend/app.py\"",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@google/genai": "^1.25.0",
+    "@tailwindcss/vite": "^4.2.4",
+    "@types/express": "^5.0.6",
+    "@types/ws": "^8.18.1",
+    "concurrently": "^9.2.1",
+    "express": "^5.2.1",
+    "http-proxy-middleware": "^3.0.5",
+    "lucide-react": "^1.7.0",
+    "motion": "^12.38.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "recharts": "^3.2.1",
+    "tailwindcss": "^4.2.4",
+    "tsx": "^4.21.0",
+    "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
+  }
+}

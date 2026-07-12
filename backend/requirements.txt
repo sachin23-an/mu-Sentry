@@ -1,0 +1,8 @@
+flask
+flask-sock
+pandas
+numpy
+scipy
+requests
+yfinance
+curl_cffi
