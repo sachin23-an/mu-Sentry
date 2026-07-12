@@ -1322,11 +1322,23 @@ def background_startup():
     """
     Runs in background thread.
     Flask serves immediately so frontend is never blank.
-    Data loads, then backtest runs, then live engine starts.
+
+    FIX: this used to run load_all_data() -> run_full_backtest() ->
+    live_engine() strictly sequentially. live_engine() is what sets
+    nifty_price/regime/market_snapshot, so on every restart those
+    stayed at their zero-value defaults for however long the full
+    backtest took (1-3+ minutes across 10 symbols, in-sample and
+    out-of-sample) -- a bad first impression for anyone opening the
+    dashboard right after boot, and easy to mistake for a real bug.
+
+    Now: data loads once, then the live engine (runs forever) and
+    the one-time backtest run concurrently in separate threads, so
+    the live price/regime panel populates within one live-engine
+    cycle (a few seconds) instead of waiting on the whole backtest.
     """
     load_all_data()
-    run_full_backtest()
-    live_engine()     # runs forever
+    threading.Thread(target=run_full_backtest, daemon=True).start()
+    live_engine()     # runs forever, on this thread
 
 
 if __name__ == "__main__":
