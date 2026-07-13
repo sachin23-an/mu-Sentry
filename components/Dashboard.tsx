@@ -429,7 +429,14 @@ const EngineStatus: React.FC<{ telemetry: any }> = ({ telemetry }) => {
             </div>
             <div>
               <p className="text-[10px] text-text-secondary uppercase tracking-widest font-bold mb-1">
-                Engine Latency
+                {/* FIX: this was labeled "Engine Latency", which reads as
+                    a claim about network/exchange latency. What it
+                    actually measures is telemetry.latency.current, i.e.
+                    the time the backend's live_engine loop took to fetch
+                    and process all symbols in its last pass -- a data
+                    refresh cycle time, not latency in the trading sense.
+                    Relabeled to avoid overclaiming low-latency infra. */}
+                Cycle Time
               </p>
               <p className="text-xl font-mono font-bold text-brand-blue">
                 {telemetry?.latency?.current || '0.00'}
@@ -572,8 +579,13 @@ const FlightRecorder: React.FC<{ fetchReport: () => Promise<any> }> = ({ fetchRe
 
 // ── Backtest Modal — NOW SHOWS REAL RESEARCH DATA ─────────────────────────────
 
-const BacktestModal: React.FC<{ data: any; onClose: () => void }> = ({ data, onClose }) => {
+const BacktestModal: React.FC<{ data: any; symbol: string | null; onClose: () => void }> = ({ data, symbol, onClose }) => {
   const isFull = data.status === 'COMPLETE' && data.insample;
+  // FIX: the backend already returns per-symbol results in
+  // data.per_symbol[symbol] -- this pulls out the specific stock that
+  // was actually clicked, instead of only ever showing the portfolio
+  // aggregate for every symbol.
+  const symbolData = symbol ? data.per_symbol?.[symbol] : null;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -589,7 +601,7 @@ const BacktestModal: React.FC<{ data: any; onClose: () => void }> = ({ data, onC
               Research Backtest Report
             </h3>
             <p className="text-xs text-text-secondary uppercase tracking-widest font-bold">
-              {data.period || 'Regime-Switching Portfolio'} | In-sample / Out-of-sample
+              {symbolData ? `${symbolData.name || symbol} — Individual Result` : (data.period || 'Regime-Switching Portfolio')} | In-sample / Out-of-sample
             </p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-cream-tertiary rounded-full transition-colors">
@@ -599,11 +611,48 @@ const BacktestModal: React.FC<{ data: any; onClose: () => void }> = ({ data, onC
 
         <div className="p-6 space-y-6">
 
+          {/* Per-symbol result — the actual stock that was clicked */}
+          {symbolData && (
+            <div>
+              <p className="text-[10px] font-bold text-brand-green uppercase tracking-widest mb-3">
+                {symbolData.name || symbol} — This Symbol's Backtest
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { label: 'IS Sharpe',      val: symbolData.is_sharpe,     color: 'text-brand-green' },
+                  { label: 'OOS Sharpe',     val: symbolData.oos_sharpe,    color: 'text-brand-blue' },
+                  { label: 'Win Rate',       val: symbolData.win_rate,      color: 'text-brand-yellow', suffix: '%' },
+                  { label: 'Profit Factor',  val: symbolData.profit_factor, color: 'text-text-primary' },
+                  { label: 'IS Return',      val: symbolData.is_return,     color: 'text-brand-green', suffix: '%' },
+                  { label: 'OOS Return',     val: symbolData.oos_return,    color: 'text-brand-blue', suffix: '%' },
+                  { label: 'Max Drawdown',   val: symbolData.max_drawdown,  color: 'text-brand-red', suffix: '%' },
+                  { label: 'Num Trades',     val: symbolData.num_trades,    color: 'text-text-primary' },
+                ].map(({ label, val, color, suffix }) => (
+                  <div key={label} className="p-3 bg-cream-tertiary rounded-xl border border-border-cream">
+                    <p className="text-[10px] text-text-secondary uppercase tracking-widest font-bold">{label}</p>
+                    <p className={`text-lg font-mono font-bold ${color}`}>
+                      {typeof val === 'number' ? val.toFixed(2) : (val ?? 0)}{suffix || ''}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {symbol && !symbolData && (
+            <div className="p-3 bg-brand-yellow/10 border border-brand-yellow/30 rounded-xl text-xs text-text-secondary">
+              No individual backtest result found yet for {symbol} — showing portfolio-wide context below instead.
+            </div>
+          )}
+
           {/* Strategy comparison cards */}
           {isFull ? (
             <>
               <div>
-                <p className="text-[10px] font-bold text-text-secondary uppercase tracking-widest mb-3">
+                <p className="text-[10px] font-bold text-text-secondary uppercase tracking-widest mb-1">
+                  Portfolio-Wide Context (all 10 stocks combined)
+                </p>
+                <p className="text-[10px] font-bold text-text-secondary uppercase tracking-widest mb-3 opacity-60">
                   In-Sample Performance (8 months)
                 </p>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -764,14 +813,25 @@ const Dashboard: React.FC<DashboardProps> = ({ isExplanationMode }) => {
   const { data: telemetry } = useTelemetry();
 
   const [backtestData, setBacktestData] = useState<any>(null);
+  const [backtestSymbol, setBacktestSymbol] = useState<string | null>(null);
   const [isBacktesting, setIsBacktesting] = useState<string | null>(null);
 
-  // FIX: now fetches real backtest from backend, not per-strategy simulation
-  const handleRunBacktest = async (_id: string) => {
-    setIsBacktesting(_id);
+  // FIX: this previously took an `id` parameter and never used it
+  // (named `_id`, the underscore-prefix convention for "intentionally
+  // unused") -- every "View Backtest" click, regardless of which
+  // symbol's card it came from, fetched and displayed the exact same
+  // portfolio-wide aggregate report. That's why every company showed
+  // identical numbers.
+  //
+  // The backend's run_full_backtest() already computes real per-symbol
+  // results (per_symbol_results[symbol] in backend/app.py) and returns
+  // them in the same /v1/backtest response as data.per_symbol -- they
+  // just were never displayed. This now tracks which symbol was
+  // clicked and the modal shows that symbol's real numbers first.
+  const handleRunBacktest = async (id: string) => {
+    setIsBacktesting(id);
+    setBacktestSymbol(id);
     try {
-      // FIX: this was calling /api/v1/backtest, which doesn't exist --
-      // the real route registered in backend/app.py is /v1/backtest.
       const response = await fetch('/v1/backtest', { method: 'GET' });
       if (response.ok) {
         const data = await response.json();
@@ -988,7 +1048,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isExplanationMode }) => {
       </div>
 
       {backtestData && (
-        <BacktestModal data={backtestData} onClose={() => setBacktestData(null)} />
+        <BacktestModal data={backtestData} symbol={backtestSymbol} onClose={() => { setBacktestData(null); setBacktestSymbol(null); }} />
       )}
     </div>
   );

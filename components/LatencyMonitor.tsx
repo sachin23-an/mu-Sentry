@@ -1,9 +1,21 @@
-
 import React, { useMemo } from 'react';
 import useTradingData from '../hooks/useTradingData';
 import Card from './ui/Card';
 import { AreaChart, Area, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ReferenceLine } from 'recharts';
 import { ExplanationOverlay } from './ui/Explanation';
+
+// FIX: this entire page was labeled/explained as if it measured order
+// round-trip time / trading latency ("competitive edge in the market
+// instantly"). What it actually plots is telemetry.latency, which the
+// backend populates with cycle_ms -- the time backend/app.py's
+// live_engine loop took to fetch and process all watched symbols in
+// its last pass. That's a backend data-refresh duration (currently
+// 10-90+ seconds depending on yfinance response times), not network
+// or exchange latency in any trading sense. Relabeled throughout so
+// this doesn't overclaim low-latency infrastructure the project
+// doesn't have. The underlying charts/math (mean/std thresholds,
+// distribution histogram, per-strategy breakdown) are legitimate and
+// unchanged -- only the framing and copy changed.
 
 interface LatencyMonitorProps {
     isExplanationMode: boolean;
@@ -69,35 +81,35 @@ const LatencyMonitor: React.FC<LatencyMonitorProps> = ({ isExplanationMode }) =>
 
     return (
         <div className="p-6 space-y-6">
-            <h2 className="text-3xl font-serif font-bold text-text-primary">Latency Monitor</h2>
+            <h2 className="text-3xl font-serif font-bold text-text-primary">Cycle Time Monitor</h2>
              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="relative">
                     <Card>
-                        <h3 className="text-text-secondary text-[10px] uppercase tracking-widest font-bold mb-1">Current System Latency</h3>
-                        <p className={`text-3xl font-bold ${avgLatency > 50 ? 'text-brand-yellow' : 'text-text-primary'}`}>{avgLatency.toFixed(2)}ms</p>
+                        <h3 className="text-text-secondary text-[10px] uppercase tracking-widest font-bold mb-1">Last Cycle Time</h3>
+                        <p className={`text-3xl font-bold ${avgLatency > 30000 ? 'text-brand-yellow' : 'text-text-primary'}`}>{avgLatency.toFixed(2)}ms</p>
                     </Card>
-                    {isExplanationMode && <ExplanationOverlay title="Current Latency" what="The system-wide average order round-trip time, right now." why="This is our real-time speed. If this number creeps up, we are losing our competitive edge in the market instantly." how="Calculated from the most recent latency data points from all critical systems." />}
+                    {isExplanationMode && <ExplanationOverlay title="Last Cycle Time" what="How long the backend's live data-refresh loop took to fetch and process every watched symbol in its most recent pass." why="This is a data-pipeline health metric, not trading latency -- it tells us whether yfinance is responding quickly or throttling us, which directly affects how current the dashboard's numbers are." how="Measured backend-side as time.time() at the start of the loop vs. the end, once per cycle (currently every ~20s plus fetch time)." />}
                 </div>
                  <div className="relative">
                     <Card>
-                        <h3 className="text-text-secondary text-[10px] uppercase tracking-widest font-bold mb-1">Peak Latency (session)</h3>
-                        <p className={`text-3xl font-bold ${maxLatency > 80 ? 'text-brand-red' : 'text-text-primary'}`}>{maxLatency.toFixed(2)}ms</p>
+                        <h3 className="text-text-secondary text-[10px] uppercase tracking-widest font-bold mb-1">Peak Cycle Time (session)</h3>
+                        <p className={`text-3xl font-bold ${maxLatency > 60000 ? 'text-brand-red' : 'text-text-primary'}`}>{maxLatency.toFixed(2)}ms</p>
                     </Card>
-                    {isExplanationMode && <ExplanationOverlay title="Peak Latency" what="The single worst (highest) latency measurement recorded during the current trading session." why="This tells us the worst-case scenario we've faced today. It's crucial for understanding our system's performance under stress." how="Maintains a running maximum of all latency values recorded since the system started." />}
+                    {isExplanationMode && <ExplanationOverlay title="Peak Cycle Time" what="The single longest data-refresh cycle recorded during the current session." why="Shows worst-case data-pipeline slowness -- useful for spotting when the free Yahoo Finance data source is being slow or rate-limiting requests." how="Maintains a running maximum of all cycle-time values recorded since the backend started." />}
                 </div>
                  <div className="relative">
                     <Card>
-                        <h3 className="text-text-secondary text-[10px] uppercase tracking-widest font-bold mb-1">Latency Status</h3>
-                        <p className={`text-3xl font-bold ${avgLatency > 80 ? 'text-brand-red' : avgLatency > 50 ? 'text-brand-yellow' : 'text-brand-green'}`}>
-                            {avgLatency > 80 ? 'CRITICAL' : avgLatency > 50 ? 'WARNING' : 'NOMINAL'}
+                        <h3 className="text-text-secondary text-[10px] uppercase tracking-widest font-bold mb-1">Pipeline Status</h3>
+                        <p className={`text-3xl font-bold ${avgLatency > 60000 ? 'text-brand-red' : avgLatency > 30000 ? 'text-brand-yellow' : 'text-brand-green'}`}>
+                            {avgLatency > 60000 ? 'SLOW' : avgLatency > 30000 ? 'DEGRADED' : 'NOMINAL'}
                         </p>
                     </Card>
-                     {isExplanationMode && <ExplanationOverlay title="Latency Status" what="A human-readable summary of the current latency situation based on predefined thresholds." why="Provides an at-a-glance health check. Quants don't need to read the numbers; the color tells them if they need to act." how="A simple state machine: if latency > 80ms, status is CRITICAL. If > 50ms, WARNING. Otherwise, NOMINAL." />}
+                     {isExplanationMode && <ExplanationOverlay title="Pipeline Status" what="A human-readable summary of current data-refresh speed based on fixed thresholds." why="At-a-glance check for whether the data pipeline is healthy, without having to read raw millisecond numbers." how="Simple thresholds: cycle time > 60s is SLOW, > 30s is DEGRADED, otherwise NOMINAL. Tuned for a free-tier yfinance pipeline, not a trading system." />}
                 </div>
             </div>
             <div className="relative">
                 <Card>
-                    <h3 className="text-lg font-serif font-bold text-text-primary mb-4">System Latency Over Time (with Adaptive Thresholds)</h3>
+                    <h3 className="text-lg font-serif font-bold text-text-primary mb-4">Cycle Time Over Time (with Adaptive Thresholds)</h3>
                     <ResponsiveContainer width="100%" height={350}>
                         <AreaChart data={timeSeriesData}>
                              <defs>
@@ -111,18 +123,18 @@ const LatencyMonitor: React.FC<LatencyMonitorProps> = ({ isExplanationMode }) =>
                             <YAxis stroke="#5A5A5A" fontSize={10} domain={[0, 'dataMax + 20']} label={{ value: 'ms', position: 'insideLeft', angle: -90, fill: '#5A5A5A', dy: 10, fontSize: 10 }}/>
                             <Tooltip contentStyle={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(0,0,0,0.1)', borderRadius: '12px' }} labelStyle={{ color: '#1A1A1A', fontWeight: 'bold' }}/>
                             <Legend wrapperStyle={{fontSize: "12px", paddingTop: "10px"}}/>
-                            <Area type="monotone" dataKey="latency" name="System Latency" stroke="#4A6FA5" strokeWidth={2} fillOpacity={1} fill="url(#colorLatency)" />
+                            <Area type="monotone" dataKey="latency" name="Cycle Time" stroke="#4A6FA5" strokeWidth={2} fillOpacity={1} fill="url(#colorLatency)" />
                             <Line type="monotone" dataKey="warning" name="Warning (μ+2σ)" stroke="#C4A46B" strokeWidth={2} strokeDasharray="5 5" dot={false} />
                             <Line type="monotone" dataKey="critical" name="Critical (μ+4σ)" stroke="#A64D4D" strokeWidth={2} strokeDasharray="5 5" dot={false} />
                         </AreaChart>
                     </ResponsiveContainer>
                 </Card>
-                {isExplanationMode && <ExplanationOverlay title="Latency Time-Series w/ Adaptive Thresholds" what="A historical graph of latency with dynamic warning (yellow) and critical (red) thresholds." why="Static thresholds are naive. A 50ms spike is normal during market open, but a disaster in a quiet market. These adaptive thresholds, based on recent volatility (standard deviation), adjust to market conditions, reducing false alarms and highlighting true anomalies." how="Calculates a rolling mean (μ) and standard deviation (σ) of latency. Thresholds are plotted at μ+2σ and μ+4σ." />}
+                {isExplanationMode && <ExplanationOverlay title="Cycle Time Series w/ Adaptive Thresholds" what="A historical graph of backend cycle time with dynamic warning (yellow) and critical (red) thresholds." why="Static thresholds don't adapt well -- a slow cycle during a cold start is expected, but a sustained slow cycle later usually means Yahoo Finance is throttling. Adaptive thresholds based on recent variance reduce false alarms." how="Calculates a rolling mean (μ) and standard deviation (σ) of cycle time. Thresholds are plotted at μ+2σ and μ+4σ." />}
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="relative">
                     <Card>
-                        <h3 className="text-lg font-serif font-bold text-text-primary mb-4">Latency by Strategy</h3>
+                        <h3 className="text-lg font-serif font-bold text-text-primary mb-4">Cycle Time by Strategy</h3>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
                             {strategies.map(s => (
                                 <div key={s.name} className="p-3 bg-cream-tertiary rounded-xl border border-border-cream text-center">
@@ -132,14 +144,14 @@ const LatencyMonitor: React.FC<LatencyMonitorProps> = ({ isExplanationMode }) =>
                             ))}
                         </div>
                     </Card>
-                    {isExplanationMode && <ExplanationOverlay title="Latency by Strategy" what="A breakdown of current latency for each individual trading algorithm." why="Isolates the problem. If system-wide latency is high, this tells us if it's one misbehaving algorithm or a problem with the entire network infrastructure." how="Each strategy process reports its own recent average latency, which is displayed here for comparison." />}
+                    {isExplanationMode && <ExplanationOverlay title="Cycle Time by Strategy" what="A per-symbol breakdown of the most recent processing time reported for each strategy." why="Helps isolate whether a slowdown is coming from one specific symbol/strategy or the whole data pipeline." how="Each strategy entry carries its own last-reported latency value from backend state, shown here for comparison." />}
                 </div>
                 <div className="relative">
                     <Card>
-                        <h3 className="text-lg font-serif font-bold text-text-primary mb-4">Latency Distribution (Session)</h3>
+                        <h3 className="text-lg font-serif font-bold text-text-primary mb-4">Cycle Time Distribution (Session)</h3>
                         <LatencyDistributionChart latencyData={latencyData.map(d => d.latency)} />
                     </Card>
-                    {isExplanationMode && <ExplanationOverlay title="Latency Distribution Histogram" what="A bar chart showing how many latency measurements fall into different time buckets (e.g., 10-15ms, 15-20ms)." why="The average latency can be misleading. This chart reveals the 'tail risk'— a long tail of high-latency events that could be killing profitability, even if the average looks good. A tight, left-skewed distribution is the goal." how="Groups all latency measurements from the session into bins and counts the number of occurrences in each." />}
+                    {isExplanationMode && <ExplanationOverlay title="Cycle Time Distribution Histogram" what="A bar chart showing how many cycle-time measurements fall into different duration buckets." why="The average can hide a long tail of slow cycles (e.g. from yfinance rate-limiting or symbol errors). This chart reveals that tail instead of hiding it behind a single average number." how="Groups all cycle-time measurements from the session into bins and counts occurrences in each." />}
                 </div>
             </div>
         </div>

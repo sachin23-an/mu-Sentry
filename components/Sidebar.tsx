@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { 
   Activity, 
   Shield, 
@@ -26,7 +25,7 @@ interface SidebarProps {
 
 const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'latency', label: 'Latency Monitor', icon: Activity },
+  { id: 'latency', label: 'Cycle Time Monitor', icon: Activity },
   { id: 'risk', label: 'Risk Heatmap', icon: Shield },
   { id: 'pnl', label: 'PnL Analyzer', icon: TrendingUp },
   { id: 'alerts', label: 'Alert Center', icon: AlertCircle },
@@ -34,17 +33,19 @@ const navItems = [
 ];
 
 const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView }) => {
-  const { marketSnapshot } = useTradingData();
-  const [cpuLoad, setCpuLoad] = useState(12);
-  const [memLoad, setMemLoad] = useState(45);
+  const { marketSnapshot, isRealConnected } = useTradingData();
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCpuLoad(prev => Math.max(5, Math.min(95, prev + (Math.random() * 2 - 1))));
-      setMemLoad(prev => Math.max(30, Math.min(85, prev + (Math.random() * 2 - 1))));
-    }, 5000);
-    return () => clearInterval(interval);
-  }, []);
+  // FIX: this component previously had a "System Health" section with
+  // CPU Load / Buffer (memory) gauges driven entirely by Math.random(),
+  // wiggling every 5 seconds with no connection to anything real -- the
+  // same category of problem as the fake AI panel removed earlier.
+  // It also had a "NSE CORE: ACTIVE" indicator hardcoded to always show
+  // ACTIVE regardless of whether the backend was actually connected.
+  //
+  // The fake CPU/memory gauges have been removed rather than replaced
+  // (there was no real backend metric to wire them to, and adding one
+  // just to fill a gauge isn't worth the complexity). The connection
+  // indicator now reflects the real WebSocket connection state.
 
   return (
     <aside className="bg-cream-secondary border-r border-border-cream flex flex-col h-full overflow-hidden">
@@ -116,44 +117,23 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView }) => {
           </div>
         </div>
 
-        {/* System Health Section */}
+        {/* Connection Status Section */}
         <div className="mt-8 px-4 space-y-4">
-          <p className="text-[10px] font-bold text-text-secondary uppercase tracking-widest opacity-50">System Health</p>
-          
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <div className="flex justify-between text-[10px] font-mono text-text-secondary">
-                <span className="flex items-center tracking-tighter"><Cpu size={10} className="mr-1" /> CORE LOAD</span>
-                <span>{cpuLoad.toFixed(1)}%</span>
-              </div>
-              <div className="h-1 bg-cream-tertiary rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-brand-green transition-all duration-1000" 
-                  style={{ width: `${cpuLoad}%` }}
-                />
-              </div>
-            </div>
+          <p className="text-[10px] font-bold text-text-secondary uppercase tracking-widest opacity-50">Connection</p>
 
-            <div className="space-y-1">
-              <div className="flex justify-between text-[10px] font-mono text-text-secondary">
-                <span className="flex items-center tracking-tighter"><Database size={10} className="mr-1" /> BUFFER</span>
-                <span>{memLoad.toFixed(1)}%</span>
-              </div>
-              <div className="h-1 bg-cream-tertiary rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-brand-blue transition-all duration-1000" 
-                  style={{ width: `${memLoad}%` }}
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between text-[10px] font-mono text-text-secondary pt-1">
-              <span className="flex items-center tracking-tighter"><Wifi size={10} className="mr-1" /> NSE CORE</span>
+          <div className="flex items-center justify-between text-[10px] font-mono text-text-secondary pt-1">
+            <span className="flex items-center tracking-tighter"><Wifi size={10} className="mr-1" /> ENGINE LINK</span>
+            {isRealConnected ? (
               <span className="text-brand-green font-bold flex items-center">
                 <span className="w-1.5 h-1.5 bg-brand-green rounded-full mr-1 animate-pulse" />
-                ACTIVE
+                CONNECTED
               </span>
-            </div>
+            ) : (
+              <span className="text-brand-red font-bold flex items-center">
+                <span className="w-1.5 h-1.5 bg-brand-red rounded-full mr-1" />
+                OFFLINE
+              </span>
+            )}
           </div>
         </div>
       </nav>
@@ -165,8 +145,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView }) => {
             <User size={20} />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-text-primary truncate">MorningStar</p>
-            <p className="text-[10px] text-text-secondary truncate">Senior Quant Trader</p>
+            <p className="text-sm font-bold text-text-primary truncate">Research Session</p>
+            <p className="text-[10px] text-text-secondary truncate">Local Instance</p>
           </div>
         </div>
       </div>
